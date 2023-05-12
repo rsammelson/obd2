@@ -36,6 +36,7 @@ impl Obd2Basic {
         };
 
         device.connect()?;
+        device.flush()?;
 
         Ok(device)
     }
@@ -86,11 +87,29 @@ impl Obd2Basic {
     }
 
     pub fn get_line(&mut self) -> Result<Option<Vec<u8>>> {
-        self.get_until(b'\r')
+        let result = self.get_until(b'\n')?;
+        let Some(mut line) = result else {
+            return Ok(result);
+        };
+        if line.pop() == Some(b'\n') {
+            Ok(Some(line))
+        } else {
+            Err(Error::Communication("get_line no line ending".to_owned()))
+        }
     }
 
     pub fn get_until_prompt(&mut self) -> Result<Option<Vec<u8>>> {
-        self.get_until(b'>')
+        let result = self.get_until(b'>')?;
+        let Some(mut line) = result else {
+            return Ok(result);
+        };
+        if line.pop() == Some(b'>') {
+            Ok(Some(line))
+        } else {
+            Err(Error::Communication(
+                "get_until_prompt no ending".to_owned(),
+            ))
+        }
     }
 
     fn get_until(&mut self, end_byte: u8) -> Result<Option<Vec<u8>>> {
@@ -102,13 +121,17 @@ impl Obd2Basic {
         let start = time::Instant::now();
         while start.elapsed() < TIMEOUT {
             let Some(b) = self.get_byte()? else { continue };
-            match b {
+            let b = match b {
                 b'\r' => {
                     buf.push(b'\n');
+                    b'\n'
                 }
-                b'\n' => {}
-                _ => buf.push(b),
-            }
+                b'\n' => b, // no push here
+                _ => {
+                    buf.push(b);
+                    b
+                }
+            };
             if b == end_byte {
                 break;
             }
@@ -143,6 +166,14 @@ impl Obd2Basic {
         }
     }
 
+    pub fn flush(&mut self) -> Result<()> {
+        thread::sleep(time::Duration::from_millis(500));
+        self.read_into_queue()?;
+        self.buffer.clear();
+        thread::sleep(time::Duration::from_millis(500));
+        Ok(())
+    }
+
     fn flush_buffers(&mut self) -> Result<()> {
         self.device.usb_purge_buffers()?;
         Ok(())
@@ -151,7 +182,15 @@ impl Obd2Basic {
     pub fn send_serial_cmd(&mut self, data: &str) -> Result<()> {
         self.device.write_all(data.as_bytes())?;
         self.device.write_all(b"\r\n")?;
-        Ok(())
+        let line = self.get_line()?;
+        if line.as_ref().is_some_and(|v| v == data.as_bytes()) {
+            Ok(())
+        } else {
+            Err(Error::Communication(format!(
+                "send_serial_cmd: got {:?} instead of echoed command ({})",
+                line, data
+            )))
+        }
     }
 
     fn send_serial_str(&mut self, data: &str) -> Result<()> {
@@ -163,12 +202,14 @@ impl Obd2Basic {
         let mut buf = [0u8; 16];
         loop {
             let len = self.device.read(&mut buf)?;
-            self.buffer.extend(&buf[0..len]);
-            trace!(
-                "read_into_queue: values {:?}",
-                std::str::from_utf8(&buf[0..len])
-            );
-            if len == 0 {
+            if len > 0 {
+                self.buffer.extend(&buf[0..len]);
+                trace!(
+                    "read_into_queue: values {:?}",
+                    std::str::from_utf8(&buf[0..len])
+                );
+            } else {
+                trace!("read_into_queue: no values left to read");
                 break;
             }
         }
@@ -182,6 +223,8 @@ pub enum Error {
     Ftdi(ftdi::Error),
     #[error("IO error: `{0:?}`")]
     IO(std::io::Error),
+    #[error("Communication error: `{0}`")]
+    Communication(String),
 }
 
 impl From<ftdi::Error> for Error {

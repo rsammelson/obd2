@@ -121,6 +121,32 @@ impl Obd2 {
         Ok(String::from_utf8(result)?)
     }
 
+    pub fn get_dtc_info(&mut self) -> Result<Vec<DtcsInfo>> {
+        let result = self.obd_command(0x01, 0x01)?;
+
+        result
+            .iter()
+            .map(|response| {
+                if response.len() == 4 {
+                    Ok(DtcsInfo {
+                        malfunction_indicator_light: (response[0] & 0x80) == 0x80,
+                        dtc_count: response[0] & 0x7f,
+                        common_test_availability: ((response[1] & 0xf0) >> 1)
+                            | (response[1] & 0x07),
+                        is_compression_engine: (response[1] & 0x08) == 0x08,
+                        specific_test_availability: ((response[3] as u16) << 8)
+                            | (response[2] as u16),
+                    })
+                } else {
+                    Err(Error::Other(format!(
+                        "get_dtc_info: expected length 4, got {}",
+                        response.len()
+                    )))
+                }
+            })
+            .collect()
+    }
+
     pub fn get_dtcs(&mut self) -> Result<Vec<Vec<Dtc>>> {
         let result = self.obd_mode_command(0x03)?;
         result
@@ -154,6 +180,16 @@ impl Obd2 {
             })
             .collect::<Result<Vec<Vec<Dtc>>>>()
     }
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct DtcsInfo {
+    malfunction_indicator_light: bool,
+    dtc_count: u8,
+    common_test_availability: u8,
+    is_compression_engine: bool,
+    specific_test_availability: u16,
 }
 
 #[derive(Debug)]

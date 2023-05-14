@@ -1,17 +1,19 @@
+mod device;
+pub use device::Elm327;
+use device::Obd2BaseDevice;
+
 use core::fmt;
 
 use log::{debug, trace};
 
-mod device;
-
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Default)]
-pub struct Obd2 {
-    device: device::Obd2Basic,
+pub struct Obd2<T: Obd2BaseDevice> {
+    device: T,
 }
 
-impl Obd2 {
+impl<T: Obd2BaseDevice> Obd2<T> {
     pub fn obd_command(&mut self, mode: u8, pid: u8) -> Result<Vec<Vec<u8>>> {
         let result = self.command(&format!("{:02x}{:02x}", mode, pid))?;
 

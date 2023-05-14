@@ -2,7 +2,7 @@ mod obd2;
 
 fn main() {
     env_logger::init();
-    let mut device = obd2::Obd2::default();
+    let mut device: obd2::Obd2<obd2::Elm327> = obd2::Obd2::default();
 
     println!("VIN: {:?}", device.get_vin());
     println!("DTC Info: {:#?}", device.get_dtc_info());

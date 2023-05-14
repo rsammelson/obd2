@@ -5,20 +5,80 @@ use std::{
     thread, time,
 };
 
-type Result<T> = std::result::Result<T, Error>;
+use super::{Error, Obd2BaseDevice, Obd2Reader, Result};
 
-pub struct Obd2Basic {
+pub struct Elm327 {
     device: ftdi::Device,
     buffer: VecDeque<u8>,
 }
 
-impl Default for Obd2Basic {
+impl Default for Elm327 {
     fn default() -> Self {
-        Obd2Basic::new().unwrap()
+        Elm327::new().unwrap()
     }
 }
 
-impl Obd2Basic {
+impl Obd2BaseDevice for Elm327 {
+    fn reset(&mut self) -> Result<()> {
+        self.flush_buffers()?;
+        self.reset_ic()?;
+        thread::sleep(time::Duration::from_millis(500));
+        self.reset_protocol()?;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        thread::sleep(time::Duration::from_millis(500));
+        self.read_into_queue()?;
+        self.buffer.clear();
+        thread::sleep(time::Duration::from_millis(500));
+        Ok(())
+    }
+
+    fn send_serial_cmd(&mut self, data: &str) -> Result<()> {
+        self.device.write_all(data.as_bytes())?;
+        self.device.write_all(b"\r\n")?;
+        let line = self.get_line()?;
+        if line.as_ref().is_some_and(|v| v == data.as_bytes()) {
+            Ok(())
+        } else {
+            Err(Error::Communication(format!(
+                "send_serial_cmd: got {:?} instead of echoed command ({})",
+                line, data
+            )))
+        }
+    }
+}
+
+impl Obd2Reader for Elm327 {
+    fn get_line(&mut self) -> Result<Option<Vec<u8>>> {
+        let result = self.get_until(b'\n')?;
+        let Some(mut line) = result else {
+            return Ok(result);
+        };
+        if line.pop() == Some(b'\n') {
+            Ok(Some(line))
+        } else {
+            Err(Error::Communication("get_line no line ending".to_owned()))
+        }
+    }
+
+    fn get_until_prompt(&mut self) -> Result<Option<Vec<u8>>> {
+        let result = self.get_until(b'>')?;
+        let Some(mut line) = result else {
+            return Ok(result);
+        };
+        if line.pop() == Some(b'>') {
+            Ok(Some(line))
+        } else {
+            Err(Error::Communication(
+                "get_until_prompt no ending".to_owned(),
+            ))
+        }
+    }
+}
+
+impl Elm327 {
     fn new() -> Result<Self> {
         let mut ftdi_device = ftdi::find_by_vid_pid(0x0403, 0x6001)
             .interface(ftdi::Interface::A)
@@ -30,7 +90,7 @@ impl Obd2Basic {
 
         ftdi_device.usb_reset()?;
 
-        let mut device = Obd2Basic {
+        let mut device = Elm327 {
             device: ftdi_device,
             buffer: VecDeque::new(),
         };
@@ -52,20 +112,6 @@ impl Obd2Basic {
         Ok(())
     }
 
-    pub fn reset(&mut self) -> Result<()> {
-        self.flush_buffers()?;
-        self.reset_ic()?;
-        thread::sleep(time::Duration::from_millis(500));
-        self.reset_protocol()?;
-        Ok(())
-    }
-
-    pub fn cmd(&mut self, cmd: &str) -> Result<Option<String>> {
-        self.send_serial_cmd(cmd)?;
-        self.get_until_prompt()
-            .map(|o| o.and_then(|resp| String::from_utf8(resp).ok()))
-    }
-
     fn reset_ic(&mut self) -> Result<()> {
         info!("Performing IC reset");
         self.send_serial_cmd("atz")?;
@@ -84,32 +130,6 @@ impl Obd2Basic {
         debug!("reset_protocol: got response {:?}", self.cmd("0100")?);
         self.flush_buffers()?;
         Ok(())
-    }
-
-    pub fn get_line(&mut self) -> Result<Option<Vec<u8>>> {
-        let result = self.get_until(b'\n')?;
-        let Some(mut line) = result else {
-            return Ok(result);
-        };
-        if line.pop() == Some(b'\n') {
-            Ok(Some(line))
-        } else {
-            Err(Error::Communication("get_line no line ending".to_owned()))
-        }
-    }
-
-    pub fn get_until_prompt(&mut self) -> Result<Option<Vec<u8>>> {
-        let result = self.get_until(b'>')?;
-        let Some(mut line) = result else {
-            return Ok(result);
-        };
-        if line.pop() == Some(b'>') {
-            Ok(Some(line))
-        } else {
-            Err(Error::Communication(
-                "get_until_prompt no ending".to_owned(),
-            ))
-        }
     }
 
     fn get_until(&mut self, end_byte: u8) -> Result<Option<Vec<u8>>> {
@@ -166,31 +186,9 @@ impl Obd2Basic {
         }
     }
 
-    pub fn flush(&mut self) -> Result<()> {
-        thread::sleep(time::Duration::from_millis(500));
-        self.read_into_queue()?;
-        self.buffer.clear();
-        thread::sleep(time::Duration::from_millis(500));
-        Ok(())
-    }
-
     fn flush_buffers(&mut self) -> Result<()> {
         self.device.usb_purge_buffers()?;
         Ok(())
-    }
-
-    pub fn send_serial_cmd(&mut self, data: &str) -> Result<()> {
-        self.device.write_all(data.as_bytes())?;
-        self.device.write_all(b"\r\n")?;
-        let line = self.get_line()?;
-        if line.as_ref().is_some_and(|v| v == data.as_bytes()) {
-            Ok(())
-        } else {
-            Err(Error::Communication(format!(
-                "send_serial_cmd: got {:?} instead of echoed command ({})",
-                line, data
-            )))
-        }
     }
 
     fn send_serial_str(&mut self, data: &str) -> Result<()> {
@@ -214,27 +212,5 @@ impl Obd2Basic {
             }
         }
         Ok(())
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("FTDI error: `{0:?}`")]
-    Ftdi(ftdi::Error),
-    #[error("IO error: `{0:?}`")]
-    IO(std::io::Error),
-    #[error("Communication error: `{0}`")]
-    Communication(String),
-}
-
-impl From<ftdi::Error> for Error {
-    fn from(e: ftdi::Error) -> Self {
-        Error::Ftdi(e)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::IO(e)
     }
 }

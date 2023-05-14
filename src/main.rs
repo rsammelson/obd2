@@ -1,4 +1,5 @@
 mod obd2;
+use obd2::Obd2Device;
 
 fn main() {
     env_logger::init();

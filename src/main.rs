@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod obd2;
 use obd2::Obd2Device;
 

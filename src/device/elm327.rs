@@ -39,7 +39,6 @@ impl Obd2BaseDevice for Elm327 {
     fn send_serial_cmd(&mut self, data: &str) -> Result<()> {
         self.device.write_all(data.as_bytes())?;
         self.device.write_all(b"\r\n")?;
-        // thread::sleep(time::Duration::from_millis(200));
         let line = self.get_line()?;
         if line.as_ref().is_some_and(|v| v == data.as_bytes()) {
             Ok(())

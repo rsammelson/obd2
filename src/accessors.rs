@@ -3,7 +3,11 @@ use core::fmt;
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait Obd2Device {
+    /// Send an OBD command with mode and PID, and get a list of responses (one for each ECU that
+    /// responds)
     fn obd_command(&mut self, mode: u8, pid: u8) -> Result<Vec<Vec<u8>>>;
+
+    /// Like [obd_command](Self::obd_command), but for commands that do not require a PID
     fn obd_mode_command(&mut self, mode: u8) -> Result<Vec<Vec<u8>>>;
 
     fn obd_command_len<const RESPONSE_LENGTH: usize>(
@@ -33,12 +37,15 @@ pub trait Obd2Device {
             .map_err(|_| Error::IncorrectResponseLength("count", RESPONSE_COUNT, count))
     }
 
+    /// Retreive the VIN (vehicle identification number), this should match the one printed on the
+    /// vehicle
     fn get_vin(&mut self) -> Result<String> {
         let mut result = self.obd_command(0x09, 0x02)?.pop().unwrap();
         result.remove(0); // do not know what this byte is
         Ok(String::from_utf8(result)?)
     }
 
+    /// Get DTC (diagnostic trouble code) metadata for each ECU
     fn get_dtc_info(&mut self) -> Result<Vec<DtcsInfo>> {
         let result = self.obd_command(0x01, 0x01)?;
 
@@ -65,6 +72,7 @@ pub trait Obd2Device {
             .collect()
     }
 
+    /// Get DTCs for each ECU
     fn get_dtcs(&mut self) -> Result<Vec<Vec<Dtc>>> {
         let result = self.obd_mode_command(0x03)?;
         result
@@ -102,11 +110,13 @@ pub trait Obd2Device {
             .collect::<Result<Vec<Vec<Dtc>>>>()
     }
 
+    /// Get the RPM in increments of 0.25
     fn get_rpm(&mut self) -> Result<f32> {
         let result = self.obd_command_cnt_len::<1, 2>(0x01, 0x0C)?[0];
         Ok(f32::from(u16::from_be_bytes(result)) / 4.0)
     }
 
+    /// Get the speed in km/h
     fn get_speed(&mut self) -> Result<u8> {
         Ok(self.obd_command_cnt_len::<1, 1>(0x01, 0x0C)?[0][0])
     }

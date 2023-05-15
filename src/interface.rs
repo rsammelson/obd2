@@ -1,6 +1,6 @@
 use log::{debug, trace};
 
-use super::{Error, Obd2BaseDevice, Obd2Device, Result};
+use super::{device::Obd2BaseDevice, Error, Obd2Device, Result};
 
 #[derive(Default)]
 pub struct Obd2<T: Obd2BaseDevice> {

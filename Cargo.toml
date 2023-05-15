@@ -1,6 +1,9 @@
 [package]
-name = "obd"
-version = "0.0.0"
+name = "obd2"
+description = "Utility for reading data from a vehicle over OBD-II"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rsammelson/obd2"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]

@@ -9,7 +9,7 @@ pub struct Obd2<T: Obd2BaseDevice> {
 
 impl<T: Obd2BaseDevice> Obd2Device for Obd2<T> {
     fn obd_command(&mut self, mode: u8, pid: u8) -> Result<Vec<Vec<u8>>> {
-        let result = self.command(&format!("{:02x}{:02x}", mode, pid))?;
+        let result = self.command(&[mode, pid])?;
 
         for response in result.iter() {
             if response.first() != Some(&(0x40 | mode)) {
@@ -24,7 +24,7 @@ impl<T: Obd2BaseDevice> Obd2Device for Obd2<T> {
     }
 
     fn obd_mode_command(&mut self, mode: u8) -> Result<Vec<Vec<u8>>> {
-        let result = self.command(&format!("{:02x}", mode))?;
+        let result = self.command(std::slice::from_ref(&mode))?;
 
         for response in result.iter() {
             if response.first() != Some(&(0x40 | mode)) {
@@ -37,7 +37,7 @@ impl<T: Obd2BaseDevice> Obd2Device for Obd2<T> {
 }
 
 impl<T: Obd2BaseDevice> Obd2<T> {
-    fn command(&mut self, command: &str) -> Result<Vec<Vec<u8>>> {
+    fn command(&mut self, command: &[u8]) -> Result<Vec<Vec<u8>>> {
         let response = self
             .device
             .cmd(command)?

@@ -7,6 +7,12 @@ use std::{
 
 use super::{Error, Obd2BaseDevice, Obd2Reader, Result};
 
+/// An ELM327 OBD-II adapter
+///
+/// It communicates with the computer over UART using an FTDI FT232R USB-to-UART converter.
+/// Commands to the device itself are indicated by sending "AT" followed by the command, while
+/// plain strings of hex data indicate OBD-II requests to be sent to the vehicle. The responses of
+/// the vehicle are echoed back as hex characters. Capitalization and spaces are always ignored.
 pub struct Elm327 {
     device: ftdi::Device,
     buffer: VecDeque<u8>,
@@ -28,23 +34,16 @@ impl Obd2BaseDevice for Elm327 {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<()> {
-        thread::sleep(time::Duration::from_millis(500));
-        self.read_into_queue()?;
-        self.buffer.clear();
-        thread::sleep(time::Duration::from_millis(500));
-        Ok(())
-    }
-
-    fn send_serial_cmd(&mut self, data: &str) -> Result<()> {
-        self.device.write_all(data.as_bytes())?;
+    fn send_cmd(&mut self, data: &[u8]) -> Result<()> {
+        self.device.write_all(data)?;
         self.device.write_all(b"\r\n")?;
+        // thread::sleep(time::Duration::from_millis(200));
         let line = self.get_line()?;
-        if line.as_ref().is_some_and(|v| v == data.as_bytes()) {
+        if line.as_ref().is_some_and(|v| v == data) {
             Ok(())
         } else {
             Err(Error::Communication(format!(
-                "send_serial_cmd: got {:?} instead of echoed command ({})",
+                "send_serial_cmd: got {:?} instead of echoed command ({:?})",
                 line, data
             )))
         }
@@ -56,7 +55,13 @@ impl Obd2Reader for Elm327 {
         self.get_until(b'\n', false)
     }
 
-    fn get_until_prompt(&mut self) -> Result<Option<Vec<u8>>> {
+    /// Read data until the ELM327's prompt character is printed
+    ///
+    /// This will recieve the entire OBD-II response. The prompt signifies that the ELM327 is ready
+    /// for another command. If this is not called after each OBD-II command is sent, the prompt
+    /// character will come out of the recieve queue later and because it is not valid hex this
+    /// could cause problems. If a timeout occurs, `Ok(None)` will be returned.
+    fn get_response(&mut self) -> Result<Option<Vec<u8>>> {
         self.get_until(b'>', true)
     }
 }
@@ -85,6 +90,20 @@ impl Elm327 {
         Ok(device)
     }
 
+    /// Flush the device's buffer
+    pub fn flush(&mut self) -> Result<()> {
+        thread::sleep(time::Duration::from_millis(500));
+        self.read_into_queue()?;
+        self.buffer.clear();
+        thread::sleep(time::Duration::from_millis(500));
+        Ok(())
+    }
+
+    fn flush_buffers(&mut self) -> Result<()> {
+        self.device.usb_purge_buffers()?;
+        Ok(())
+    }
+
     fn connect(&mut self, check_baud_rate: bool) -> Result<()> {
         self.flush_buffers()?;
         thread::sleep(time::Duration::from_millis(500));
@@ -108,7 +127,7 @@ impl Elm327 {
         self.send_serial_cmd("ATZ")?;
         debug!(
             "reset_ic: got response {:?}",
-            self.get_until_prompt()?
+            self.get_response()?
                 .as_ref()
                 .map(|l| std::str::from_utf8(l.as_slice()))
         );
@@ -117,8 +136,14 @@ impl Elm327 {
 
     fn reset_protocol(&mut self) -> Result<()> {
         info!("Performing protocol reset");
-        debug!("reset_protocol: got response {:?}", self.cmd("ATSP0")?);
-        debug!("reset_protocol: got OBD response {:?}", self.cmd("0100")?);
+        debug!(
+            "reset_protocol: got response {:?}",
+            self.serial_cmd("ATSP0")?
+        );
+        debug!(
+            "reset_protocol: got OBD response {:?}",
+            self.cmd(&[0x01, 0x00])?
+        );
         self.flush_buffers()?;
         Ok(())
     }
@@ -148,7 +173,7 @@ impl Elm327 {
                         // our TX is bad
                         self.device.set_baud_rate(self.baud_rate)?;
                         debug!("Baud rate bad - device did not receive response");
-                        self.get_until_prompt()?;
+                        self.get_response()?;
                     }
                 } else {
                     // reset baud rate and keep looking
@@ -160,11 +185,11 @@ impl Elm327 {
                             .as_ref()
                             .map(|r| String::from_utf8_lossy(r))
                     );
-                    self.get_until_prompt()?;
+                    self.get_response()?;
                 }
             } else {
                 debug!("Baud rate bad - did not ok initially");
-                self.get_until_prompt()?;
+                self.get_response()?;
             }
 
             thread::sleep(time::Duration::from_millis(200));
@@ -222,23 +247,14 @@ impl Elm327 {
     }
 
     fn get_byte(&mut self) -> Result<Option<u8>> {
-        self.read_into_queue()?;
-        loop {
-            let b = self.buffer.pop_front();
-            if b != Some(b'\0') {
-                return Ok(b);
+        match self.buffer.pop_front() {
+            Some(b'\0') => Ok(None),
+            Some(b) => Ok(Some(b)),
+            None => {
+                self.read_into_queue()?;
+                Ok(None)
             }
         }
-    }
-
-    fn flush_buffers(&mut self) -> Result<()> {
-        self.device.usb_purge_buffers()?;
-        Ok(())
-    }
-
-    fn send_serial_str(&mut self, data: &str) -> Result<()> {
-        self.device.write_all(data.as_bytes())?;
-        Ok(())
     }
 
     fn read_into_queue(&mut self) -> Result<()> {
@@ -256,6 +272,21 @@ impl Elm327 {
                 break;
             }
         }
+        Ok(())
+    }
+
+    fn send_serial_cmd(&mut self, data: &str) -> Result<()> {
+        self.send_cmd(data.as_bytes())
+    }
+
+    fn serial_cmd(&mut self, cmd: &str) -> Result<Option<String>> {
+        self.send_serial_cmd(cmd)?;
+        self.get_response()
+            .map(|o| o.and_then(|resp| String::from_utf8(resp).ok()))
+    }
+
+    fn send_serial_str(&mut self, data: &str) -> Result<()> {
+        self.device.write_all(data.as_bytes())?;
         Ok(())
     }
 }

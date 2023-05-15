@@ -6,6 +6,33 @@ pub trait Obd2Device {
     fn obd_command(&mut self, mode: u8, pid: u8) -> Result<Vec<Vec<u8>>>;
     fn obd_mode_command(&mut self, mode: u8) -> Result<Vec<Vec<u8>>>;
 
+    fn obd_command_len<const RESPONSE_LENGTH: usize>(
+        &mut self,
+        mode: u8,
+        pid: u8,
+    ) -> Result<Vec<[u8; RESPONSE_LENGTH]>> {
+        self.obd_command(mode, pid)?
+            .into_iter()
+            .map(|v| {
+                let l = v.len();
+                v.try_into()
+                    .map_err(|_| Error::IncorrectResponseLength("length", RESPONSE_LENGTH, l))
+            })
+            .collect()
+    }
+
+    fn obd_command_cnt_len<const RESPONSE_COUNT: usize, const RESPONSE_LENGTH: usize>(
+        &mut self,
+        mode: u8,
+        pid: u8,
+    ) -> Result<[[u8; RESPONSE_LENGTH]; RESPONSE_COUNT]> {
+        let result = self.obd_command_len::<RESPONSE_LENGTH>(mode, pid)?;
+        let count = result.len();
+        result
+            .try_into()
+            .map_err(|_| Error::IncorrectResponseLength("count", RESPONSE_COUNT, count))
+    }
+
     fn get_vin(&mut self) -> Result<String> {
         let mut result = self.obd_command(0x09, 0x02)?.pop().unwrap();
         result.remove(0); // do not know what this byte is
@@ -74,6 +101,15 @@ pub trait Obd2Device {
             })
             .collect::<Result<Vec<Vec<Dtc>>>>()
     }
+
+    fn get_rpm(&mut self) -> Result<f32> {
+        let result = self.obd_command_cnt_len::<1, 2>(0x01, 0x0C)?[0];
+        Ok(f32::from(u16::from_be_bytes(result)) / 4.0)
+    }
+
+    fn get_speed(&mut self) -> Result<u8> {
+        Ok(self.obd_command_cnt_len::<1, 1>(0x01, 0x0C)?[0][0])
+    }
 }
 
 #[allow(dead_code)]
@@ -108,15 +144,20 @@ impl fmt::Display for Dtc {
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Communication error: `{0:?}`")]
-    Communication(super::device::Error),
+    #[error("Device error: `{0:?}`")]
+    Device(DeviceError),
     #[error("Other OBD2 error: `{0}`")]
     Other(String),
+    #[error("Incorrect length (`{0}`): expected `{1}`, got `{2}`")]
+    IncorrectResponseLength(&'static str, usize, usize),
 }
+
+#[derive(Debug)]
+pub struct DeviceError(super::device::Error);
 
 impl From<super::device::Error> for Error {
     fn from(e: super::device::Error) -> Self {
-        Error::Communication(e)
+        Error::Device(DeviceError(e))
     }
 }
 

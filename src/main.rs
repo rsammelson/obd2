@@ -3,6 +3,8 @@
 mod obd2;
 use obd2::Obd2Device;
 
+use std::time;
+
 fn main() {
     env_logger::init();
     let mut device: obd2::Obd2<obd2::Elm327> = obd2::Obd2::default();
@@ -19,5 +21,11 @@ fn main() {
                 println!("  - {}", dtc);
             }
         }
+    }
+
+    let state = time::Instant::now();
+    while state.elapsed() < time::Duration::from_secs(5) {
+        println!("RPM: {:?}", device.get_rpm());
+        println!("Speed: {:?}", device.get_speed());
     }
 }

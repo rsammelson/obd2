@@ -37,7 +37,6 @@ impl Obd2BaseDevice for Elm327 {
     fn send_cmd(&mut self, data: &[u8]) -> Result<()> {
         self.device.write_all(data)?;
         self.device.write_all(b"\r\n")?;
-        // thread::sleep(time::Duration::from_millis(200));
         let line = self.get_line()?;
         if line.as_ref().is_some_and(|v| v == data) {
             Ok(())

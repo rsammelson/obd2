@@ -1,3 +1,5 @@
+//! Lower level OBD-II interfacing structures
+
 mod elm327;
 pub use elm327::Elm327;
 

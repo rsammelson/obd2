@@ -1,4 +1,4 @@
-use obd2::Obd2Device;
+use obd2::commands::Obd2DataRetrieval;
 
 use std::time;
 

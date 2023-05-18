@@ -41,3 +41,8 @@ impl fmt::Display for Dtc {
         f.write_fmt(format_args!("{}{:03X}", c, n))
     }
 }
+
+pub(super) mod private {
+    pub trait Sealed {}
+    impl<T: crate::Obd2Device> Sealed for T {}
+}

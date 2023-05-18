@@ -1,4 +1,8 @@
 //! High level OBD-II interface
+//!
+//! Retrieves data from the vehicle, over the OBD-II link. The interface is defined by SAE J1979,
+//! and a list of services and PIDs is available [on
+//! Wikipedia](https://en.wikipedia.org/wiki/OBD-II_PIDs). This module mostly uses service 1.
 
 mod implementation;
 use implementation::GetObd2Values;

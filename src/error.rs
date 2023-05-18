@@ -1,17 +1,23 @@
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// An error with OBD-II communication
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    /// An error occured in the [Odb2BaseDevice](crate::device::Obd2BaseDevice)
     #[error("Device error: `{0:?}`")]
     Device(DeviceError),
-    #[error("Other OBD2 error: `{0}`")]
-    Other(String),
+
+    /// Some part of the response (described by the `&str`) was not the expected length
     #[error("Incorrect length (`{0}`): expected `{1}`, got `{2}`")]
     IncorrectResponseLength(&'static str, usize, usize),
+
+    /// Another error occurred
+    #[error("Other OBD2 error: `{0}`")]
+    Other(String),
 }
 
 #[derive(Debug)]
-pub struct DeviceError(super::device::Error);
+pub struct DeviceError(crate::device::Error);
 
 impl From<super::device::Error> for Error {
     fn from(e: super::device::Error) -> Self {

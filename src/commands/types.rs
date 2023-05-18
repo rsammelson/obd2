@@ -24,9 +24,13 @@ pub struct DtcsInfo {
 /// An individual trouble code from an ECU
 #[derive(Debug)]
 pub enum Dtc {
+    /// Powertrain, represented with `'P'`
     Powertrain(u16),
+    /// Chassis, represented with `'C'`
     Chassis(u16),
+    /// Chassis, represented with `'B'`
     Body(u16),
+    /// Network, represented with `'U'` likely due to previously being the "unknown" category
     Network(u16),
 }
 

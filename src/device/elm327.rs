@@ -13,6 +13,9 @@ use super::{Error, Obd2BaseDevice, Obd2Reader, Result};
 /// Commands to the device itself are indicated by sending "AT" followed by the command, while
 /// plain strings of hex data indicate OBD-II requests to be sent to the vehicle. The responses of
 /// the vehicle are echoed back as hex characters. Capitalization and spaces are always ignored.
+///
+/// [Datasheet for v1.4b](https://github.com/rsammelson/obd2/blob/master/docs/ELM327DSH.pdf), and
+/// the [source](https://www.elmelectronics.com/products/dsheets/).
 pub struct Elm327 {
     device: ftdi::Device,
     buffer: VecDeque<u8>,

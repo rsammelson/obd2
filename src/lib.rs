@@ -1,5 +1,7 @@
 //! Crate for communicating with OBD-II (on-board diagnostics) interfaces on cars
 //!
+//! The high-level data retrieval functions can be found in [commands::Obd2DataRetrieval].
+//!
 //! # Usage
 //! ```
 //! use obd2::{commands::Obd2DataRetrieval, device::Elm327, Obd2};

@@ -1,6 +1,6 @@
-use crate::{commands::Obd2DataRetrieval, Error, Obd2Device, Result};
+use crate::{Error, Obd2Device, Result};
 
-use super::{Dtc, DtcsInfo};
+use super::{Dtc, DtcsInfo, Obd2DataRetrieval};
 
 impl<T: Obd2Device> Obd2DataRetrieval for T {
     fn get_vin(&mut self) -> Result<String> {
@@ -70,6 +70,22 @@ impl<T: Obd2Device> Obd2DataRetrieval for T {
                 )),
             })
             .collect::<Result<Vec<Vec<Dtc>>>>()
+    }
+
+    fn get_engine_load(&mut self) -> Result<u8> {
+        Ok(self.obd_command_cnt_len::<1, 1>(0x01, 0x0C)?[0][0])
+    }
+
+    fn get_engine_coolant_temperature(&mut self) -> Result<i16> {
+        Ok((self.obd_command_cnt_len::<1, 1>(0x01, 0x0C)?[0][0] as i16) - 40)
+    }
+
+    fn get_fuel_pressure(&mut self) -> Result<i16> {
+        todo!()
+    }
+
+    fn get_engine_manifold_pressure(&mut self) -> Result<f32> {
+        todo!()
     }
 
     fn get_rpm(&mut self) -> Result<f32> {

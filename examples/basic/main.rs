@@ -22,6 +22,11 @@ fn main() {
 
     let state = time::Instant::now();
     while state.elapsed() < time::Duration::from_secs(5) {
+        println!("");
+        println!(
+            "Coolant Temperature: {:?}",
+            device.get_engine_coolant_temperature()
+        );
         println!("RPM: {:?}", device.get_rpm());
         println!("Speed: {:?}", device.get_speed());
     }

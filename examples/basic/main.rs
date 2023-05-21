@@ -7,6 +7,13 @@ fn main() {
     let mut device: obd2::Obd2<obd2::device::Elm327> = obd2::Obd2::default();
 
     println!("VIN: {:?}", device.get_vin());
+    for s in device.get_service_1_pid_support_1().unwrap().iter() {
+        println!("PID support ($01-$20): {:08X}", s);
+    }
+    for s in device.get_service_1_pid_support_2().unwrap().iter() {
+        println!("PID support ($21-$40): {:08X}", s);
+    }
+
     println!("DTC Info: {:#?}", device.get_dtc_info());
 
     let dtcs = device.get_dtcs();
@@ -28,6 +35,16 @@ fn main() {
             device.get_engine_coolant_temperature()
         );
         println!("RPM: {:?}", device.get_rpm());
-        println!("Speed: {:?}", device.get_speed());
+        println!("Speed (km/h): {:?}", device.get_speed());
+        println!("Timing Advance (º): {:?}", device.get_timing_advance());
+        println!(
+            "Intake air temp (ºC): {:?}",
+            device.get_intake_air_temperature()
+        );
+        println!("Air flow rate (g/s): {:?}", device.get_air_flow_rate());
+        println!(
+            "Throttle position (%): {:?}",
+            device.get_throttle_position()
+        );
     }
 }

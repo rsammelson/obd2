@@ -1,6 +1,13 @@
 macro_rules! trait_func {
     {
         $(#[$attr:meta])*
+        fn $name:ident($service:expr) -> $retrieve_type:ty;
+    } => {
+        $(#[$attr])*
+        fn $name(&mut self) -> Result<Vec<$retrieve_type>>;
+    };
+    {
+        $(#[$attr:meta])*
         fn $name:ident($service:expr, $pid:expr) -> $retrieve_type:ty;
     } => {
         $(#[$attr])*
@@ -23,6 +30,14 @@ macro_rules! trait_func {
 }
 
 macro_rules! impl_func {
+    {
+        $(#[$attr:meta])*
+        fn $name:ident($service:expr) -> $retrieve_type:ty;
+    } => {
+        fn $name(&mut self) -> Result<Vec<$retrieve_type>> {
+            <$retrieve_type>::get_obd2_val_mode(self, $service)
+        }
+    };
     {
         $(#[$attr:meta])*
         fn $name:ident($service:expr, $pid:expr) -> $retrieve_type:ty;
@@ -69,7 +84,7 @@ macro_rules! func {
 
         $(
             $(#[$attr_inner:meta])*
-            fn $name:ident$(<$retrieve_type:ty>)?($service:expr, $pid:expr$(, $map:expr)?) -> $output:ty;
+            fn $name:ident$(<$retrieve_type:ty>)?($service:expr$(, $pid:expr$(, $map:expr)?)?) -> $output:ty;
          )*
     } => {
         $(#[$attr])*
@@ -85,10 +100,10 @@ macro_rules! func {
                     ///
                     #[doc=concat!(
                         "Details: service ", $service,
-                        ", PID ", $pid,
+                        $(", PID ", $pid,)?
                         ", read type: `", decode_type!($output $(, $retrieve_type)?), "`"
                     )]
-                    fn $name$(<$retrieve_type>)?($service, $pid$(, $map)?) -> $output;
+                    fn $name$(<$retrieve_type>)?($service$(, $pid$(, $map)?)?) -> $output;
                 }
             )*
         }
@@ -102,7 +117,7 @@ macro_rules! func {
             $(
                 impl_func! {
                     $(#[$attr_inner])*
-                    fn $name$(<$retrieve_type>)?($service, $pid$(, $map)?) -> $output;
+                    fn $name$(<$retrieve_type>)?($service$(, $pid$(, $map)?)?) -> $output;
                 }
             )*
         }

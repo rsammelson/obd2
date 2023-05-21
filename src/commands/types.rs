@@ -34,6 +34,19 @@ pub enum Dtc {
     Network(u16),
 }
 
+impl From<u16> for Dtc {
+    fn from(val: u16) -> Self {
+        let n = val & 0x3f;
+        match val >> 14 {
+            0 => Dtc::Powertrain(n),
+            1 => Dtc::Chassis(n),
+            2 => Dtc::Body(n),
+            3 => Dtc::Network(n),
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl fmt::Display for Dtc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (c, n) = match self {
@@ -44,6 +57,18 @@ impl fmt::Display for Dtc {
         };
         f.write_fmt(format_args!("{}{:03X}", c, n))
     }
+}
+
+/// Data retreived when reading an oxygen sensor
+pub struct OxygenSensorData {
+    /// The current voltage reading (V)
+    pub voltage: f32,
+
+    /// The current associated short term fuel trim (%)
+    ///
+    /// The range of this value is approximately -1 to 1. This will be `127./128.` if not
+    /// applicable for the sensor.
+    pub shrft: f32,
 }
 
 pub(super) mod private {

@@ -35,17 +35,13 @@ impl Obd2BaseDevice for Elm327 {
     }
 
     fn send_cmd(&mut self, data: &[u8]) -> Result<()> {
-        self.device.write_all(data)?;
-        self.device.write_all(b"\r\n")?;
-        let line = self.get_line()?;
-        if line.as_ref().is_some_and(|v| v == data) {
-            Ok(())
-        } else {
-            Err(Error::Communication(format!(
-                "send_serial_cmd: got {:?} instead of echoed command ({:?})",
-                line, data
-            )))
-        }
+        trace!("send_cmd: sending {:?}", std::str::from_utf8(data));
+        self.send_serial_str(
+            data.into_iter()
+                .flat_map(|v| format!("{:02X}", v).chars().collect::<Vec<char>>())
+                .collect::<String>()
+                .as_str(),
+        )
     }
 }
 
@@ -106,7 +102,7 @@ impl Elm327 {
     fn connect(&mut self, check_baud_rate: bool) -> Result<()> {
         self.flush_buffers()?;
         thread::sleep(time::Duration::from_millis(500));
-        self.send_serial_str(" ")?;
+        self.serial_cmd(" ")?;
         thread::sleep(time::Duration::from_millis(500));
 
         self.reset()?;
@@ -123,7 +119,7 @@ impl Elm327 {
 
     fn reset_ic(&mut self) -> Result<()> {
         info!("Performing IC reset");
-        self.send_serial_cmd("ATZ")?;
+        self.send_serial_str("ATZ")?;
         debug!(
             "reset_ic: got response {:?}",
             self.get_response()?
@@ -152,7 +148,7 @@ impl Elm327 {
             let new_baud = 4000000 / u32::from(div);
 
             debug!("Trying baud rate {} (divisor {})", new_baud, div);
-            self.send_serial_cmd(&format!("ATBRD{:02X}", div))?;
+            self.send_serial_str(&format!("ATBRD{:02X}", div))?;
 
             if self.get_line()? == Some(b"OK".to_vec()) {
                 self.device.set_baud_rate(new_baud)?;
@@ -274,18 +270,28 @@ impl Elm327 {
         Ok(())
     }
 
-    fn send_serial_cmd(&mut self, data: &str) -> Result<()> {
-        self.send_cmd(data.as_bytes())
-    }
-
     fn serial_cmd(&mut self, cmd: &str) -> Result<Option<String>> {
-        self.send_serial_cmd(cmd)?;
+        self.send_serial_str(cmd)?;
         self.get_response()
             .map(|o| o.and_then(|resp| String::from_utf8(resp).ok()))
     }
 
+    /// Function for sendinga a raw string, without encoding into ASCII hex
     fn send_serial_str(&mut self, data: &str) -> Result<()> {
-        self.device.write_all(data.as_bytes())?;
-        Ok(())
+        trace!("send_serial_str: sending {:?}", data);
+
+        let data = data.as_bytes();
+
+        self.device.write_all(data)?;
+        self.device.write_all(b"\r\n")?;
+        let line = self.get_line()?;
+        if line.as_ref().is_some_and(|v| v == data) {
+            Ok(())
+        } else {
+            Err(Error::Communication(format!(
+                "send_serial_str: got {:?} instead of echoed command ({:?})",
+                line, data
+            )))
+        }
     }
 }

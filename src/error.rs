@@ -3,7 +3,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// An error with OBD-II communication
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    /// An error occured in the [Odb2BaseDevice](crate::device::Obd2BaseDevice)
+    /// An error occurred in the [Odb2BaseDevice](crate::device::Obd2BaseDevice)
     #[error("Device error: `{0:?}`")]
     Device(DeviceError),
 

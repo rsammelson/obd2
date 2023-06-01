@@ -59,7 +59,7 @@ impl fmt::Display for Dtc {
     }
 }
 
-/// Data retreived when reading an oxygen sensor
+/// Data retrieved when reading an oxygen sensor
 pub struct OxygenSensorData {
     /// The current voltage reading (V)
     pub voltage: f32,

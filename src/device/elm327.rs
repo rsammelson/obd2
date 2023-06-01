@@ -55,9 +55,9 @@ impl Obd2Reader for Elm327 {
 
     /// Read data until the ELM327's prompt character is printed
     ///
-    /// This will recieve the entire OBD-II response. The prompt signifies that the ELM327 is ready
+    /// This will receive the entire OBD-II response. The prompt signifies that the ELM327 is ready
     /// for another command. If this is not called after each OBD-II command is sent, the prompt
-    /// character will come out of the recieve queue later and because it is not valid hex this
+    /// character will come out of the receive queue later and because it is not valid hex this
     /// could cause problems. If a timeout occurs, `Ok(None)` will be returned.
     fn get_response(&mut self) -> Result<Option<Vec<u8>>> {
         self.get_until(b'>', true)
@@ -279,7 +279,7 @@ impl Elm327 {
             .map(|o| o.and_then(|resp| String::from_utf8(resp).ok()))
     }
 
-    /// Function for sendinga a raw string, without encoding into ASCII hex
+    /// Function for sending a raw string, without encoding into ASCII hex
     fn send_serial_str(&mut self, data: &str) -> Result<()> {
         trace!("send_serial_str: sending {:?}", data);
 

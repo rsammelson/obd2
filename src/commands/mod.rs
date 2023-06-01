@@ -19,21 +19,21 @@ use crate::{Obd2Device, Result};
 func! {
     /// Trait for devices that can retrieve data over OBD-II
     ///
-    /// Automatically implemented for implementors of [odb2::Obd2Device](crate::Obd2Device), and
+    /// Automatically implemented for implementers of [odb2::Obd2Device](crate::Obd2Device), and
     /// currently cannot be otherwise implemented.
     trait Obd2DataRetrieval;
 
     {
-        /// Retreive the VIN (vehicle identification number)
+        /// Retrieve the VIN (vehicle identification number)
         ///
-        /// This should match the number printed on the vehicle, and is a good
-        /// command for checking that the OBD-II interface is working correctly.
+        /// This should match the number printed on the vehicle, and is a good command for checking
+        /// that the OBD-II interface is working correctly.
         fn get_vin(self, 0x09, 0x02) -> Result<String> {
             implementation::get_vin(self)
         }
     }
 
-    /// Get DTCs for each ECU
+    /// Get list of DTCs for each ECU
     fn get_dtcs(0x03) -> Vec<Dtc>;
 
     /// Get service 1 PID support for $01 to $20
@@ -88,7 +88,7 @@ func! {
 
     /// Get the fuel pressure in kPa
     ///
-    /// This measurement is gauge pressure (measured relative to the atmosphere)
+    /// This measurement is gauge pressure (measured relative to the atmosphere).
     fn get_fuel_pressure<u8>(0x01, 0x0A, |v: i16| v * 3) -> i16;
 
     /// Get the intake manifold pressure in kPa

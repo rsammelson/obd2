@@ -4,7 +4,7 @@ use super::{device::Obd2BaseDevice, Error, Obd2Device, Result};
 
 /// An OBD-II interface
 ///
-/// Wraps an implementor of [Obd2BaseDevice] to allow for higher-level usage of the OBD-II
+/// Wraps an implementer of [Obd2BaseDevice] to allow for higher-level usage of the OBD-II
 /// interface.
 #[derive(Default)]
 pub struct Obd2<T: Obd2BaseDevice> {

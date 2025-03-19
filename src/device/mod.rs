@@ -3,6 +3,9 @@
 mod elm327;
 pub use elm327::Elm327;
 
+mod serial_comm;
+pub use serial_comm::{FTDIDevice, SerialPort};
+
 type Result<T> = std::result::Result<T, Error>;
 
 /// A lower-level API for using an OBD-II device
@@ -54,6 +57,10 @@ pub enum Error {
     #[error("FTDI error: `{0:?}`")]
     Ftdi(ftdi::Error),
 
+    /// An error with the underlying [serialport device](serialport::SerialPort)
+    #[error("Serialport error: `{0:?}`")]
+    Serialport(serialport::Error),
+
     /// An I/O error in a low-level [std::io] stream operation
     #[error("IO error: `{0:?}`")]
     IO(std::io::Error),
@@ -66,6 +73,12 @@ pub enum Error {
 impl From<ftdi::Error> for Error {
     fn from(e: ftdi::Error) -> Self {
         Error::Ftdi(e)
+    }
+}
+
+impl From<serialport::Error> for Error {
+    fn from(e: serialport::Error) -> Self {
+        Error::Serialport(e)
     }
 }
 

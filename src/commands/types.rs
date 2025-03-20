@@ -42,7 +42,7 @@ impl From<u16> for Dtc {
             1 => Dtc::Chassis(n),
             2 => Dtc::Body(n),
             3 => Dtc::Network(n),
-            _ => unreachable!(),
+            _ => unreachable!(), // can't happen, only two bits
         }
     }
 }

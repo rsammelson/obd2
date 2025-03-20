@@ -23,6 +23,10 @@ pub struct Elm327 {
 }
 
 impl Default for Elm327 {
+    /// Create a Elm327 device
+    ///
+    /// # Panics
+    /// If the device cannot be initialized. Use [Self::new] for a panic-free API.
     fn default() -> Self {
         Elm327::new().unwrap()
     }
@@ -40,7 +44,7 @@ impl Obd2BaseDevice for Elm327 {
     fn send_cmd(&mut self, data: &[u8]) -> Result<()> {
         trace!("send_cmd: sending {:?}", std::str::from_utf8(data));
         self.send_serial_str(
-            data.into_iter()
+            data.iter()
                 .flat_map(|v| format!("{:02X}", v).chars().collect::<Vec<char>>())
                 .collect::<String>()
                 .as_str(),
@@ -134,15 +138,22 @@ impl Elm327 {
 
     fn reset_protocol(&mut self) -> Result<()> {
         info!("Performing protocol reset");
+
+        // set to use automatic protocol selection
         debug!(
             "reset_protocol: got response {:?}",
             self.serial_cmd("ATSP0")?
         );
+
+        // perform the search
         debug!(
             "reset_protocol: got OBD response {:?}",
             self.cmd(&[0x01, 0x00])?
         );
+
+        // get rid of extra data hanging around in the buffer
         self.flush_buffers()?;
+
         Ok(())
     }
 

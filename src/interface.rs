@@ -17,9 +17,11 @@ impl<T: Obd2BaseDevice> Obd2Device for Obd2<T> {
 
         for response in result.iter() {
             if response.first() != Some(&(0x40 | mode)) {
+                // mismatch of mode in response
                 todo!()
             }
             if response.get(1) != Some(&pid) {
+                // mismatch of PID in response
                 todo!()
             }
         }
@@ -109,7 +111,8 @@ impl<T: Obd2BaseDevice> Obd2<T> {
             .filter_map(|l| l.split_once(':'))
             .flat_map(|(idx, data)| {
                 if u8::from_str_radix(idx, 16) != Ok(n_idx) {
-                    todo!()
+                    // got an invalid hex code or values were not already in the correct order
+                    todo!("Line index: {}, should be {:X}", idx, n_idx)
                 }
                 n_idx = (n_idx + 1) % 0x10;
                 data.split_whitespace().map(|s| s.to_owned())

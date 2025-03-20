@@ -13,7 +13,7 @@ pub trait Obd2Device {
     ///
     /// The responses are a list with one element for each ECU that responds. The data is decoded
     /// into the ODB-II bytes from the vehicle and the first byte of the response---representing
-    /// the mode the vehicle recieved---is validated and removed.
+    /// the mode the vehicle received---is validated and removed.
     fn obd_mode_command(&mut self, mode: u8) -> Result<Vec<Vec<u8>>>;
 
     /// Send command and get list of OBD-II responses as an array

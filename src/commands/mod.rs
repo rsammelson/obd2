@@ -220,4 +220,7 @@ func! {
 
     /// Get service 1 PID support for $21 to $40
     fn get_service_1_pid_support_2(0x01, 0x20) -> u32;
+
+    // Get the fuel level (out of 255)
+    fn get_fuel_level(0x01, 0x2F) -> u8;
 }

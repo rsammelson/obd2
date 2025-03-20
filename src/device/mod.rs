@@ -4,7 +4,16 @@ mod elm327;
 pub use elm327::Elm327;
 
 mod serial_comm;
-pub use serial_comm::{FTDIDevice, SerialPort};
+
+#[cfg(feature = "ftdi_comm")]
+mod ftdi_comm;
+#[cfg(feature = "ftdi_comm")]
+pub use ftdi_comm::FTDIDevice;
+
+#[cfg(feature = "serialport_comm")]
+mod serialport_comm;
+#[cfg(feature = "serialport_comm")]
+pub use serialport_comm::SerialPort;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -54,10 +63,12 @@ pub trait Obd2Reader {
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     /// An error with the underlying [FTDI device](ftdi::Device)
+    #[cfg(feature = "ftdi_comm")]
     #[error("FTDI error: `{0:?}`")]
     Ftdi(ftdi::Error),
 
     /// An error with the underlying [serialport device](serialport::SerialPort)
+    #[cfg(feature = "serialport_comm")]
     #[error("Serialport error: `{0:?}`")]
     Serialport(serialport::Error),
 
@@ -70,12 +81,14 @@ pub enum Error {
     Communication(String),
 }
 
+#[cfg(feature = "ftdi_comm")]
 impl From<ftdi::Error> for Error {
     fn from(e: ftdi::Error) -> Self {
         Error::Ftdi(e)
     }
 }
 
+#[cfg(feature = "serialport_comm")]
 impl From<serialport::Error> for Error {
     fn from(e: serialport::Error) -> Self {
         Error::Serialport(e)

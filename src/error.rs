@@ -21,7 +21,7 @@ pub enum Error {
 
 /// An error with the ELM327 device
 #[derive(Debug)]
-pub struct DeviceError(pub crate::device::Error);
+pub struct DeviceError(crate::device::Error);
 
 impl From<super::device::Error> for Error {
     fn from(e: super::device::Error) -> Self {
@@ -31,12 +31,12 @@ impl From<super::device::Error> for Error {
 
 impl From<std::num::ParseIntError> for Error {
     fn from(e: std::num::ParseIntError) -> Self {
-        Error::Other(format!("invalid data received: {:?}", e))
+        Error::Other(format!("invalid data recieved: {:?}", e))
     }
 }
 
 impl From<std::string::FromUtf8Error> for Error {
     fn from(e: std::string::FromUtf8Error) -> Self {
-        Error::Other(format!("invalid string received: {:?}", e))
+        Error::Other(format!("invalid string recieved: {:?}", e))
     }
 }

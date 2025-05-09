@@ -9,13 +9,20 @@ vehicle.
 ## Usage
 
 ```rs
-use obd2::{commands::Obd2DataRetrieval, device::Elm327, Obd2};
+use obd2::{commands::Obd2DataRetrieval, device::{Elm327, FTDIDevice}, Obd2};
 
 fn main() -> Result<(), obd2::Error> {
-    let mut device = Obd2::<Elm327>::default();
+    let mut device = Obd2::<Elm327::<FTDIDevice>>::new(Elm327::new(FTDIDevice::new()?)?)?;
     println!("VIN: {}", device.get_vin()?);
     Ok(())
 }
+```
+
+alternatively, you could use a serial port provided by your operating system such as 
+/dev/ttyUSB0 on unix-like systems
+
+```rs
+let mut device = Obd2::<Elm327::<SerialPort>>::new(Elm327::new(SerialPort::new("/dev/ttyUSB0")?)?)?;
 ```
 
 See the docs for more: https://docs.rs/obd2/

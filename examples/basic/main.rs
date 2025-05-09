@@ -2,15 +2,16 @@ use obd2::commands::Obd2DataRetrieval;
 
 use std::time;
 
-fn main() {
+fn main() -> Result<(), obd2::Error> {
     env_logger::init();
-    let mut device: obd2::Obd2<obd2::device::Elm327> = obd2::Obd2::default();
+    let mut device: obd2::Obd2<obd2::device::Elm327<obd2::device::FTDIDevice>> =
+        obd2::Obd2::new(obd2::device::Elm327::new(obd2::device::FTDIDevice::new()?)?)?;
 
     println!("VIN: {:?}", device.get_vin());
-    for s in device.get_service_1_pid_support_1().unwrap().iter() {
+    for s in device.get_service_1_pid_support_1()?.iter() {
         println!("PID support ($01-$20): {:08X}", s);
     }
-    for s in device.get_service_1_pid_support_2().unwrap().iter() {
+    for s in device.get_service_1_pid_support_2()?.iter() {
         println!("PID support ($21-$40): {:08X}", s);
     }
 
@@ -47,4 +48,6 @@ fn main() {
             device.get_throttle_position()
         );
     }
+
+    Ok(())
 }

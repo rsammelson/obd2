@@ -1,3 +1,6 @@
+//! Error types for OBD-II related errors
+
+/// Result type defaulted with this library's error type
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// An error with OBD-II communication
@@ -16,6 +19,7 @@ pub enum Error {
     Other(String),
 }
 
+/// An error with the ELM327 device
 #[derive(Debug)]
 pub struct DeviceError(crate::device::Error);
 

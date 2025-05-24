@@ -1,11 +1,7 @@
 use log::{debug, info, trace};
-use std::{
-    collections::VecDeque,
-    io::{Read, Write},
-    thread, time,
-};
+use std::{collections::VecDeque, thread, time};
 
-use super::{Error, Obd2BaseDevice, Obd2Reader, Result};
+use super::{serial_comm::SerialComm, Error, Obd2BaseDevice, Obd2Reader, Result};
 
 /// An ELM327 OBD-II adapter
 ///
@@ -16,23 +12,13 @@ use super::{Error, Obd2BaseDevice, Obd2Reader, Result};
 ///
 /// [Datasheet for v1.4b](https://github.com/rsammelson/obd2/blob/master/docs/ELM327DSH.pdf), and
 /// the [source](https://www.elmelectronics.com/products/dsheets/).
-pub struct Elm327 {
-    device: ftdi::Device,
+pub struct Elm327<T: SerialComm> {
+    device: T,
     buffer: VecDeque<u8>,
     baud_rate: u32,
 }
 
-impl Default for Elm327 {
-    /// Create a Elm327 device
-    ///
-    /// # Panics
-    /// If the device cannot be initialized. Use [Self::new] for a panic-free API.
-    fn default() -> Self {
-        Elm327::new().unwrap()
-    }
-}
-
-impl Obd2BaseDevice for Elm327 {
+impl<T: SerialComm> Obd2BaseDevice for Elm327<T> {
     fn reset(&mut self) -> Result<()> {
         self.flush_buffers()?;
         self.reset_ic()?;
@@ -52,7 +38,7 @@ impl Obd2BaseDevice for Elm327 {
     }
 }
 
-impl Obd2Reader for Elm327 {
+impl<T: SerialComm> Obd2Reader for Elm327<T> {
     fn get_line(&mut self) -> Result<Option<Vec<u8>>> {
         self.get_until(b'\n', false)
     }
@@ -68,22 +54,14 @@ impl Obd2Reader for Elm327 {
     }
 }
 
-impl Elm327 {
-    fn new() -> Result<Self> {
-        let mut ftdi_device = ftdi::find_by_vid_pid(0x0403, 0x6001)
-            .interface(ftdi::Interface::A)
-            .open()?;
-
-        ftdi_device.set_baud_rate(38400)?;
-        ftdi_device.configure(ftdi::Bits::Eight, ftdi::StopBits::One, ftdi::Parity::None)?;
-        // device.set_latency_timer(2).unwrap();
-
-        ftdi_device.usb_reset()?;
-
+impl<T: SerialComm> Elm327<T> {
+    /// Creates a new Elm327 adapter with the given
+    /// unserlying Serial Communication device
+    pub fn new(serial_device: T) -> Result<Self> {
         let mut device = Elm327 {
-            device: ftdi_device,
+            device: serial_device,
             buffer: VecDeque::new(),
-            baud_rate: 38400,
+            baud_rate: 38_400,
         };
 
         device.connect(false)?;
@@ -102,7 +80,7 @@ impl Elm327 {
     }
 
     fn flush_buffers(&mut self) -> Result<()> {
-        self.device.usb_purge_buffers()?;
+        self.device.purge_buffers()?;
         Ok(())
     }
 
@@ -127,11 +105,10 @@ impl Elm327 {
     fn reset_ic(&mut self) -> Result<()> {
         info!("Performing IC reset");
         self.send_serial_str("ATZ")?;
+        let response = self.get_response()?;
         debug!(
             "reset_ic: got response {:?}",
-            self.get_response()?
-                .as_ref()
-                .map(|l| std::str::from_utf8(l.as_slice()))
+            response.as_ref().map(|l| std::str::from_utf8(l.as_slice()))
         );
         Ok(())
     }
@@ -140,16 +117,12 @@ impl Elm327 {
         info!("Performing protocol reset");
 
         // set to use automatic protocol selection
-        debug!(
-            "reset_protocol: got response {:?}",
-            self.serial_cmd("ATSP0")?
-        );
+        let elm_response = self.serial_cmd("ATSP0")?;
+        debug!("reset_protocol: got response {:?}", elm_response);
 
-        // perform the search
-        debug!(
-            "reset_protocol: got OBD response {:?}",
-            self.cmd(&[0x01, 0x00])?
-        );
+        // perform the search for ECUs
+        let obd_response = self.cmd(&[0x01, 0x00])?;
+        debug!("reset_protocol: got OBD response {:?}", obd_response);
 
         // get rid of extra data hanging around in the buffer
         self.flush_buffers()?;
@@ -270,6 +243,7 @@ impl Elm327 {
         let mut buf = [0u8; 16];
         loop {
             let len = self.device.read(&mut buf)?;
+
             if len > 0 {
                 self.buffer.extend(&buf[0..len]);
                 trace!(

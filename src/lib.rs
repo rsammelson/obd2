@@ -6,13 +6,19 @@
 //!
 //! # Usage
 //! ```
-//! use obd2::{commands::Obd2DataRetrieval, device::Elm327, Obd2};
+//! use obd2::{commands::Obd2DataRetrieval, device::{Elm327, FTDIDevice}, Obd2};
 //!
 //! fn main() -> Result<(), obd2::Error> {
-//!     let mut device = Obd2::<Elm327>::default();
+//!     let mut device = Obd2::new(Elm327::new(FTDIDevice::new()?)?)?;
 //!     println!("VIN: {}", device.get_vin()?);
 //!     Ok(())
 //! }
+//! ```
+//!
+//! alternatively, you could use a serial port provided by your operating system such as
+//! /dev/ttyUSB0 on unix-like systems
+//! ```
+//! let mut device = Obd2::new(Elm327::new(SerialPort::new("/dev/ttyUSB0")?)?)?;
 //! ```
 
 #![forbid(unsafe_code)]

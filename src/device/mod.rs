@@ -3,7 +3,8 @@
 mod elm327;
 pub use elm327::Elm327;
 
-mod serial_comm;
+mod serial_communication;
+pub use serial_communication::SerialCommunication;
 
 #[cfg(feature = "ftdi_comm")]
 mod ftdi_comm;
@@ -62,41 +63,21 @@ pub trait Obd2Reader {
 /// Error type for low-level ODB-II communication issues
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    /// An error with the underlying [FTDI device](ftdi::Device)
+    /// An error with the underlying FTDI device
     #[cfg(feature = "ftdi_comm")]
     #[error("FTDI error: `{0:?}`")]
-    Ftdi(ftdi::Error),
+    Ftdi(#[from] ftdi::Error),
 
-    /// An error with the underlying [serialport device](serialport::SerialPort)
+    /// An error with the underlying [serialport::SerialPort]
     #[cfg(feature = "serialport_comm")]
     #[error("Serialport error: `{0:?}`")]
-    Serialport(serialport::Error),
+    Serialport(#[from] serialport::Error),
 
-    /// An I/O error in a low-level [std::io] stream operation
+    /// An I/O error in a stream operation
     #[error("IO error: `{0:?}`")]
-    IO(std::io::Error),
+    IO(#[from] std::io::Error),
 
     /// An OBD-II or interface device protocol error
     #[error("Communication error: `{0}`")]
     Communication(String),
-}
-
-#[cfg(feature = "ftdi_comm")]
-impl From<ftdi::Error> for Error {
-    fn from(e: ftdi::Error) -> Self {
-        Error::Ftdi(e)
-    }
-}
-
-#[cfg(feature = "serialport_comm")]
-impl From<serialport::Error> for Error {
-    fn from(e: serialport::Error) -> Self {
-        Error::Serialport(e)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::IO(e)
-    }
 }

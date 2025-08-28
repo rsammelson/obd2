@@ -21,7 +21,13 @@ pub enum Error {
 
 /// An error with the ELM327 device
 #[derive(Debug)]
-pub struct DeviceError(pub crate::device::Error);
+pub struct DeviceError(crate::device::Error);
+
+impl std::fmt::Display for DeviceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 impl From<super::device::Error> for Error {
     fn from(e: super::device::Error) -> Self {

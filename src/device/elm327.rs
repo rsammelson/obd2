@@ -1,7 +1,7 @@
 use log::{debug, info, trace};
 use std::{collections::VecDeque, thread, time};
 
-use super::{serial_comm::SerialComm, Error, Obd2BaseDevice, Obd2Reader, Result};
+use super::{Error, Obd2BaseDevice, Obd2Reader, Result, SerialCommunication};
 
 /// An ELM327 OBD-II adapter
 ///
@@ -12,13 +12,13 @@ use super::{serial_comm::SerialComm, Error, Obd2BaseDevice, Obd2Reader, Result};
 ///
 /// [Datasheet for v1.4b](https://github.com/rsammelson/obd2/blob/master/docs/ELM327DSH.pdf), and
 /// the [source](https://www.elmelectronics.com/products/dsheets/).
-pub struct Elm327<T: SerialComm> {
+pub struct Elm327<T: SerialCommunication> {
     device: T,
     buffer: VecDeque<u8>,
     baud_rate: u32,
 }
 
-impl<T: SerialComm> Obd2BaseDevice for Elm327<T> {
+impl<T: SerialCommunication> Obd2BaseDevice for Elm327<T> {
     fn reset(&mut self) -> Result<()> {
         self.flush_buffers()?;
         self.reset_ic()?;
@@ -38,7 +38,7 @@ impl<T: SerialComm> Obd2BaseDevice for Elm327<T> {
     }
 }
 
-impl<T: SerialComm> Obd2Reader for Elm327<T> {
+impl<T: SerialCommunication> Obd2Reader for Elm327<T> {
     fn get_line(&mut self) -> Result<Option<Vec<u8>>> {
         self.get_until(b'\n', false)
     }
@@ -54,12 +54,11 @@ impl<T: SerialComm> Obd2Reader for Elm327<T> {
     }
 }
 
-impl<T: SerialComm> Elm327<T> {
-    /// Creates a new Elm327 adapter with the given
-    /// unserlying Serial Communication device
-    pub fn new(serial_device: T) -> Result<Self> {
+impl<T: SerialCommunication> Elm327<T> {
+    /// Creates a new Elm327 adapter with the given underlying serial device
+    pub fn new(device: T) -> Result<Self> {
         let mut device = Elm327 {
-            device: serial_device,
+            device,
             buffer: VecDeque::new(),
             baud_rate: 38_400,
         };
@@ -80,7 +79,7 @@ impl<T: SerialComm> Elm327<T> {
     }
 
     fn flush_buffers(&mut self) -> Result<()> {
-        self.device.purge_buffers()?;
+        self.device.flush()?;
         Ok(())
     }
 
@@ -243,7 +242,6 @@ impl<T: SerialComm> Elm327<T> {
         let mut buf = [0u8; 16];
         loop {
             let len = self.device.read(&mut buf)?;
-
             if len > 0 {
                 self.buffer.extend(&buf[0..len]);
                 trace!(

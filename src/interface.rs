@@ -43,6 +43,18 @@ impl<T: Obd2BaseDevice> Obd2Device for Obd2<T> {
 }
 
 impl<T: Obd2BaseDevice> Obd2<T> {
+    /// Creates a new instance of an Obd device
+    pub fn new(dev: T) -> Result<Self> {
+        let device = Obd2 { device: dev };
+
+        Ok(device)
+    }
+
+    /// Resets the device
+    pub fn reset(&mut self) -> Result<()> {
+        Ok(self.device.reset()?)
+    }
+
     fn command(&mut self, command: &[u8]) -> Result<Vec<Vec<u8>>> {
         let response = self
             .device

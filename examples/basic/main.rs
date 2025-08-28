@@ -1,10 +1,15 @@
-use obd2::commands::Obd2DataRetrieval;
+use obd2::{
+    commands::Obd2DataRetrieval as _,
+    device::{Elm327, FTDIDevice},
+    Obd2,
+};
 
 use std::time;
 
 fn main() {
     env_logger::init();
-    let mut device: obd2::Obd2<obd2::device::Elm327> = obd2::Obd2::default();
+    let mut device: Obd2<Elm327<FTDIDevice>> =
+        Obd2::new(Elm327::new(FTDIDevice::new().unwrap()).unwrap()).unwrap();
 
     println!("VIN: {:?}", device.get_vin());
     for s in device.get_service_1_pid_support_1().unwrap().iter() {

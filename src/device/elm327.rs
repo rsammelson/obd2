@@ -15,7 +15,6 @@ use super::{Error, Obd2BaseDevice, Obd2Reader, Result, SerialCommunication};
 pub struct Elm327<T: SerialCommunication> {
     device: T,
     buffer: VecDeque<u8>,
-    baud_rate: u32,
 }
 
 impl<T: SerialCommunication> Obd2BaseDevice for Elm327<T> {
@@ -60,7 +59,6 @@ impl<T: SerialCommunication> Elm327<T> {
         let mut device = Elm327 {
             device,
             buffer: VecDeque::new(),
-            baud_rate: 38_400,
         };
 
         device.connect(false)?;
@@ -137,6 +135,7 @@ impl<T: SerialCommunication> Elm327<T> {
             self.send_serial_str(&format!("ATBRD{:02X}", div))?;
 
             if self.get_line()? == Some(b"OK".to_vec()) {
+                let old_baud_rate = self.device.get_baud_rate()?;
                 self.device.set_baud_rate(new_baud)?;
 
                 // validate new baud rate
@@ -148,17 +147,16 @@ impl<T: SerialCommunication> Elm327<T> {
                     if self.get_line().expect("Device left in unknown state")
                         == Some(b"OK".to_vec())
                     {
-                        self.baud_rate = new_baud;
                         return Ok(Some((div, new_baud)));
                     } else {
                         // our TX is bad
-                        self.device.set_baud_rate(self.baud_rate)?;
+                        self.device.set_baud_rate(old_baud_rate)?;
                         debug!("Baud rate bad - device did not receive response");
                         self.get_response()?;
                     }
                 } else {
                     // reset baud rate and keep looking
-                    self.device.set_baud_rate(self.baud_rate)?;
+                    self.device.set_baud_rate(old_baud_rate)?;
                     debug!(
                         "Baud rate bad - did get correct string (got {:?} - {:?})",
                         validation_response,

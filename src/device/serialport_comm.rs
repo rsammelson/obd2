@@ -24,6 +24,10 @@ impl SerialPort {
 }
 
 impl SerialCommunication for SerialPort {
+    fn get_baud_rate(&mut self) -> Result<u32, Error> {
+        Ok(self.device.baud_rate()?)
+    }
+
     fn set_baud_rate(&mut self, baud_rate: u32) -> Result<(), Error> {
         Ok(self.device.set_baud_rate(baud_rate)?)
     }

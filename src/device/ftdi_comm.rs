@@ -2,6 +2,7 @@ use super::{serial_communication::DEFAULT_BAUD_RATE, Error, SerialCommunication}
 
 /// Communicate with a USB to serial FTDI device with the FTDI library
 pub struct FTDIDevice {
+    baud_rate: u32,
     device: ftdi::Device,
 }
 
@@ -16,13 +17,22 @@ impl FTDIDevice {
         device.configure(ftdi::Bits::Eight, ftdi::StopBits::One, ftdi::Parity::None)?;
         device.usb_reset()?;
 
-        Ok(Self { device })
+        Ok(Self {
+            baud_rate: DEFAULT_BAUD_RATE,
+            device,
+        })
     }
 }
 
 impl SerialCommunication for FTDIDevice {
+    fn get_baud_rate(&mut self) -> Result<u32, Error> {
+        Ok(self.baud_rate)
+    }
+
     fn set_baud_rate(&mut self, baud_rate: u32) -> Result<(), Error> {
-        Ok(self.device.set_baud_rate(baud_rate)?)
+        self.device.set_baud_rate(baud_rate)?;
+        self.baud_rate = baud_rate;
+        Ok(())
     }
 }
 

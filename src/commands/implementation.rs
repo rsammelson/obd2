@@ -104,6 +104,7 @@ where
     fn get_obd2_val_mode(device: &mut T, service: u8) -> Result<Vec<Self>>;
 }
 
+// FIXME: this is broken, no idea what it is trying to do here
 impl<T: Obd2Device> GetObd2ValuesMode<T> for Vec<Dtc> {
     fn get_obd2_val_mode(device: &mut T, service: u8) -> Result<Vec<Self>> {
         let result = device.obd_mode_command(service)?;
@@ -113,13 +114,13 @@ impl<T: Obd2Device> GetObd2ValuesMode<T> for Vec<Dtc> {
                 Some(0) => {
                     if response.len() % 2 == 1 {
                         let mut ret = Vec::new();
-                        for i in (1..response.len()).step_by(2) {
-                            ret.push(match response[i] >> 6 {
+                        for b in response[1..].iter().step_by(2) {
+                            ret.push(match b >> 6 {
                                 0 => Dtc::Powertrain(0),
                                 1 => Dtc::Chassis(0),
                                 2 => Dtc::Body(0),
                                 3 => Dtc::Network(0),
-                                _ => unreachable!(),
+                                _ => unreachable!(), // can't happen, only two bits
                             });
                         }
                         Ok(ret)
@@ -139,6 +140,6 @@ impl<T: Obd2Device> GetObd2ValuesMode<T> for Vec<Dtc> {
                     "no response bytes when getting DTCs".to_owned(),
                 )),
             })
-            .collect::<Result<Vec<Vec<Dtc>>>>()
+            .collect()
     }
 }

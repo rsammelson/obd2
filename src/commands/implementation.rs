@@ -1,6 +1,5 @@
-use crate::{Error, Obd2Device, Result};
-
 use super::{Dtc, DtcsInfo, OxygenSensorData};
+use crate::{Error, Obd2Device, Result};
 
 pub(super) fn get_vin<T: Obd2Device>(device: &mut T) -> Result<String> {
     let mut result = device.obd_command(0x09, 0x02)?.pop().unwrap();

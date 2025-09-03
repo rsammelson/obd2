@@ -1,10 +1,10 @@
+use std::time;
+
 use obd2::{
     commands::Obd2DataRetrieval as _,
     device::{Elm327, FTDIDevice},
     Obd2,
 };
-
-use std::time;
 
 fn main() {
     env_logger::init();

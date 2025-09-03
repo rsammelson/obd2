@@ -4,8 +4,9 @@ mod low_level;
 #[cfg(test)]
 pub mod test;
 
-use log::{debug, info, trace};
 use std::{io::BufRead as _, thread, time};
+
+use log::{debug, info, trace};
 
 use super::{Error, Obd2BaseDevice, Obd2Reader, Result, SerialCommunication};
 

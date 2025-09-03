@@ -1,7 +1,7 @@
 use std::fmt;
 
 /// DTC (diagnostic trouble code) metadata
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DtcsInfo {
     /// Whether the "check engine" light is illuminated
@@ -22,7 +22,7 @@ pub struct DtcsInfo {
 }
 
 /// An individual trouble code from an ECU
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Dtc {
     /// Powertrain, represented with `'P'`
     Powertrain(u16),

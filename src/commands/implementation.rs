@@ -104,41 +104,38 @@ where
     fn get_obd2_val_mode(device: &mut T, service: u8) -> Result<Vec<Self>>;
 }
 
-// FIXME: this is broken, no idea what it is trying to do here
 impl<T: Obd2Device> GetObd2ValuesMode<T> for Vec<Dtc> {
     fn get_obd2_val_mode(device: &mut T, service: u8) -> Result<Vec<Self>> {
         let result = device.obd_mode_command(service)?;
         result
             .iter()
-            .map(|response| match response.first() {
-                Some(0) => {
-                    if response.len() % 2 == 1 {
-                        let mut ret = Vec::new();
-                        for b in response[1..].iter().step_by(2) {
-                            ret.push(match b >> 6 {
-                                0 => Dtc::Powertrain(0),
-                                1 => Dtc::Chassis(0),
-                                2 => Dtc::Body(0),
-                                3 => Dtc::Network(0),
-                                _ => unreachable!(), // can't happen, only two bits
-                            });
-                        }
-                        Ok(ret)
-                    } else {
-                        Err(Error::Other(format!(
-                            "invalid response when getting DTCs {:?}",
-                            response
-                        )))
-                    }
-                }
-                Some(n) if *n <= 3 => todo!(),
-                Some(_) => Err(Error::Other(format!(
-                    "invalid response {:?} when getting DTCs",
+            .map(|response| {
+                if response.len() == 6 {
+                    let mut got_zero = false;
                     response
-                ))),
-                None => Err(Error::Other(
-                    "no response bytes when getting DTCs".to_owned(),
-                )),
+                        .chunks_exact(2)
+                        .map(|c| u16::from_be_bytes(c.try_into().unwrap()))
+                        .map(|c| match c & 0xc000 {
+                            0x0000 => Dtc::Powertrain(c & 0x3fff),
+                            0x4000 => Dtc::Chassis(c & 0x3fff),
+                            0x8000 => Dtc::Body(c & 0x3fff),
+                            0xc000 => Dtc::Network(c & 0x3fff),
+                            _ => unreachable!(), // can't happen, only two bits are unmasked
+                        })
+                        .filter_map(|c| {
+                            if c == Dtc::Powertrain(0) {
+                                got_zero = true;
+                                None
+                            } else if got_zero {
+                                Some(Err(Error::Other("DTC after padding".to_owned())))
+                            } else {
+                                Some(Ok(c))
+                            }
+                        })
+                        .collect()
+                } else {
+                    todo!("{response:?}")
+                }
             })
             .collect()
     }

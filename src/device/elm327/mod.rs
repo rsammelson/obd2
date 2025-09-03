@@ -1,3 +1,4 @@
+mod hex_iterator;
 mod low_level;
 
 use log::{debug, info, trace};
@@ -31,7 +32,8 @@ impl<T: SerialCommunication> Obd2BaseDevice for Elm327<T> {
         trace!("send_cmd: sending {:?}", std::str::from_utf8(data));
         self.send_serial_str(
             data.iter()
-                .flat_map(|v| format!("{:02X}", v).chars().collect::<Vec<char>>())
+                .copied()
+                .flat_map(hex_iterator::HexIterator::from)
                 .collect::<String>()
                 .as_str(),
         )

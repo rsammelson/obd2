@@ -1,5 +1,7 @@
+mod low_level;
+
 use log::{debug, info, trace};
-use std::{collections::VecDeque, thread, time};
+use std::{io::BufRead as _, thread, time};
 
 use super::{Error, Obd2BaseDevice, Obd2Reader, Result, SerialCommunication};
 
@@ -13,8 +15,7 @@ use super::{Error, Obd2BaseDevice, Obd2Reader, Result, SerialCommunication};
 /// [Datasheet for v1.4b](https://github.com/rsammelson/obd2/blob/master/docs/ELM327DSH.pdf), and
 /// the [source](https://www.elmelectronics.com/products/dsheets/).
 pub struct Elm327<T: SerialCommunication> {
-    device: T,
-    buffer: VecDeque<u8>,
+    device: std::io::BufReader<low_level::Elm327Reader<T>>,
 }
 
 impl<T: SerialCommunication> Obd2BaseDevice for Elm327<T> {
@@ -39,7 +40,18 @@ impl<T: SerialCommunication> Obd2BaseDevice for Elm327<T> {
 
 impl<T: SerialCommunication> Obd2Reader for Elm327<T> {
     fn get_line(&mut self) -> Result<Option<Vec<u8>>> {
-        self.get_until(b'\n', false)
+        let mut buffer = Vec::new();
+        Ok(self
+            .device
+            .read_until(b'\r', &mut buffer)
+            .map(|_| Some(buffer))
+            .or_else(|e| {
+                if matches!(e.kind(), std::io::ErrorKind::TimedOut) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            })?)
     }
 
     /// Read data until the ELM327's prompt character is printed
@@ -49,7 +61,18 @@ impl<T: SerialCommunication> Obd2Reader for Elm327<T> {
     /// character will come out of the receive queue later and because it is not valid hex this
     /// could cause problems. If a timeout occurs, `Ok(None)` will be returned.
     fn get_response(&mut self) -> Result<Option<Vec<u8>>> {
-        self.get_until(b'>', true)
+        let mut buffer = Vec::new();
+        Ok(self
+            .device
+            .read_until(b'>', &mut buffer)
+            .map(|_| Some(buffer))
+            .or_else(|e| {
+                if matches!(e.kind(), std::io::ErrorKind::TimedOut) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            })?)
     }
 }
 
@@ -57,8 +80,7 @@ impl<T: SerialCommunication> Elm327<T> {
     /// Creates a new Elm327 adapter with the given underlying serial device
     pub fn new(device: T) -> Result<Self> {
         let mut device = Elm327 {
-            device,
-            buffer: VecDeque::new(),
+            device: std::io::BufReader::new(low_level::Elm327Reader::new(device)),
         };
 
         device.connect(false)?;
@@ -70,14 +92,25 @@ impl<T: SerialCommunication> Elm327<T> {
     /// Flush the device's buffer
     pub fn flush(&mut self) -> Result<()> {
         thread::sleep(time::Duration::from_millis(500));
-        self.read_into_queue()?;
-        self.buffer.clear();
-        thread::sleep(time::Duration::from_millis(500));
+        loop {
+            match self.device.fill_buf()?.len() {
+                0 => break,
+                n if n == self.device.capacity() => self.device.consume(n),
+                n => {
+                    self.device.consume(n);
+                    break;
+                }
+            }
+        }
+        thread::sleep(time::Duration::from_millis(100));
         Ok(())
     }
 
     fn flush_buffers(&mut self) -> Result<()> {
-        self.device.flush()?;
+        match self.device.buffer().len() {
+            0 => {}
+            n => self.device.consume(n),
+        }
         Ok(())
     }
 
@@ -135,28 +168,37 @@ impl<T: SerialCommunication> Elm327<T> {
             self.send_serial_str(&format!("ATBRD{:02X}", div))?;
 
             if self.get_line()? == Some(b"OK".to_vec()) {
-                let old_baud_rate = self.device.get_baud_rate()?;
-                self.device.set_baud_rate(new_baud)?;
+                let old_baud_rate = self.device.get_mut().get_mut().get_baud_rate()?;
+                self.device.get_mut().get_mut().set_baud_rate(new_baud)?;
 
                 // validate new baud rate
                 let validation_response = self.get_line()?;
                 if validation_response == Some(b"ELM327 v1.5".to_vec()) {
                     // reply that it is okay
-                    self.send_serial_str("\r")
-                        .expect("Device left in unknown state");
-                    if self.get_line().expect("Device left in unknown state")
+                    if self
+                        .send_serial_str("\r")
+                        .and_then(|()| self.get_line())
+                        .inspect_err(|err| {
+                            log::warn!("Device left in unknown state (error: {:?})", err)
+                        })?
                         == Some(b"OK".to_vec())
                     {
                         return Ok(Some((div, new_baud)));
                     } else {
                         // our TX is bad
-                        self.device.set_baud_rate(old_baud_rate)?;
+                        self.device
+                            .get_mut()
+                            .get_mut()
+                            .set_baud_rate(old_baud_rate)?;
                         debug!("Baud rate bad - device did not receive response");
                         self.get_response()?;
                     }
                 } else {
                     // reset baud rate and keep looking
-                    self.device.set_baud_rate(old_baud_rate)?;
+                    self.device
+                        .get_mut()
+                        .get_mut()
+                        .set_baud_rate(old_baud_rate)?;
                     debug!(
                         "Baud rate bad - did get correct string (got {:?} - {:?})",
                         validation_response,
@@ -176,84 +218,6 @@ impl<T: SerialCommunication> Elm327<T> {
         Ok(None)
     }
 
-    fn get_until(&mut self, end_byte: u8, allow_empty: bool) -> Result<Option<Vec<u8>>> {
-        const TIMEOUT: time::Duration = time::Duration::from_secs(5);
-
-        trace!("get_until: getting until {}", end_byte);
-
-        let mut buf = Vec::new();
-        let start = time::Instant::now();
-        while start.elapsed() < TIMEOUT {
-            let Some(b) = self.get_byte()? else { continue };
-            let b = match b {
-                b'\r' => Some(b'\n'),
-                b'\n' => None, // no push here
-                _ => Some(b),
-            };
-            if let Some(b) = b {
-                buf.push(b);
-                if b == end_byte {
-                    break;
-                }
-            }
-        }
-
-        trace!(
-            "get_until: got {:?} ({:?})",
-            buf,
-            std::str::from_utf8(buf.as_slice())
-        );
-
-        match buf.pop() {
-            Some(b) if b == end_byte => {
-                if allow_empty || !buf.is_empty() {
-                    Ok(Some(buf))
-                } else {
-                    // empty line, try again
-                    self.get_until(end_byte, allow_empty)
-                }
-            } // we got it
-            Some(f) => {
-                // incomplete line read
-                for b in buf.iter().rev() {
-                    self.buffer.push_front(*b);
-                }
-                self.buffer.push_front(f);
-                Ok(None)
-            }
-            None => Ok(None),
-        }
-    }
-
-    fn get_byte(&mut self) -> Result<Option<u8>> {
-        match self.buffer.pop_front() {
-            Some(b'\0') => Ok(None),
-            Some(b) => Ok(Some(b)),
-            None => {
-                self.read_into_queue()?;
-                Ok(None)
-            }
-        }
-    }
-
-    fn read_into_queue(&mut self) -> Result<()> {
-        let mut buf = [0u8; 16];
-        loop {
-            let len = self.device.read(&mut buf)?;
-            if len > 0 {
-                self.buffer.extend(&buf[0..len]);
-                trace!(
-                    "read_into_queue: values {:?}",
-                    std::str::from_utf8(&buf[0..len])
-                );
-            } else {
-                trace!("read_into_queue: no values left to read");
-                break;
-            }
-        }
-        Ok(())
-    }
-
     fn serial_cmd(&mut self, cmd: &str) -> Result<Option<String>> {
         self.send_serial_str(cmd)?;
         self.get_response()
@@ -266,8 +230,8 @@ impl<T: SerialCommunication> Elm327<T> {
 
         let data = data.as_bytes();
 
-        self.device.write_all(data)?;
-        self.device.write_all(b"\r\n")?;
+        self.device.get_mut().get_mut().write_all(data)?;
+        self.device.get_mut().get_mut().write_all(b"\r\n")?;
         let line = self.get_line()?;
         if line.as_ref().is_some_and(|v| v == data) {
             Ok(())

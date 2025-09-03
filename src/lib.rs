@@ -43,3 +43,6 @@ pub use interface::Obd2;
 
 mod obd2_device;
 pub use obd2_device::Obd2Device;
+
+#[cfg(test)]
+mod test;

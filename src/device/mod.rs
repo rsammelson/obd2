@@ -1,6 +1,6 @@
 //! Lower level OBD-II interfacing structures
 
-mod elm327;
+pub(crate) mod elm327;
 pub use elm327::Elm327;
 
 mod serial_communication;

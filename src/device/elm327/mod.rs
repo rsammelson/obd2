@@ -1,6 +1,9 @@
 mod hex_iterator;
 mod low_level;
 
+#[cfg(test)]
+pub mod test;
+
 use log::{debug, info, trace};
 use std::{io::BufRead as _, thread, time};
 
@@ -15,11 +18,11 @@ use super::{Error, Obd2BaseDevice, Obd2Reader, Result, SerialCommunication};
 ///
 /// [Datasheet for v1.4b](https://github.com/rsammelson/obd2/blob/master/docs/ELM327DSH.pdf), and
 /// the [source](https://www.elmelectronics.com/products/dsheets/).
-pub struct Elm327<T: SerialCommunication> {
+pub struct Elm327<T> {
     device: std::io::BufReader<low_level::Elm327Reader<T>>,
 }
 
-impl<T: SerialCommunication> Obd2BaseDevice for Elm327<T> {
+impl<T: std::io::Read + std::io::Write> Obd2BaseDevice for Elm327<T> {
     fn reset(&mut self) -> Result<()> {
         self.flush_buffers()?;
         self.reset_ic()?;
@@ -40,12 +43,12 @@ impl<T: SerialCommunication> Obd2BaseDevice for Elm327<T> {
     }
 }
 
-impl<T: SerialCommunication> Obd2Reader for Elm327<T> {
+impl<T: std::io::Read> Obd2Reader for Elm327<T> {
     fn get_line(&mut self) -> Result<Option<Vec<u8>>> {
         let mut buffer = Vec::new();
         Ok(self
             .device
-            .read_until(b'\r', &mut buffer)
+            .read_until(b'\n', &mut buffer)
             .map(|_| Some(buffer))
             .or_else(|e| {
                 if matches!(e.kind(), std::io::ErrorKind::TimedOut) {
@@ -53,7 +56,8 @@ impl<T: SerialCommunication> Obd2Reader for Elm327<T> {
                 } else {
                     Err(e)
                 }
-            })?)
+            })?
+            .and_then(|mut b| b.pop().is_some_and(|v| v == b'\n').then_some(b)))
     }
 
     /// Read data until the ELM327's prompt character is printed
@@ -74,23 +78,12 @@ impl<T: SerialCommunication> Obd2Reader for Elm327<T> {
                 } else {
                     Err(e)
                 }
-            })?)
+            })?
+            .and_then(|mut b| b.pop().is_some_and(|v| v == b'>').then_some(b)))
     }
 }
 
-impl<T: SerialCommunication> Elm327<T> {
-    /// Creates a new Elm327 adapter with the given underlying serial device
-    pub fn new(device: T) -> Result<Self> {
-        let mut device = Elm327 {
-            device: std::io::BufReader::new(low_level::Elm327Reader::new(device)),
-        };
-
-        device.connect(false)?;
-        device.flush()?;
-
-        Ok(device)
-    }
-
+impl<T: std::io::Read> Elm327<T> {
     /// Flush the device's buffer
     pub fn flush(&mut self) -> Result<()> {
         thread::sleep(time::Duration::from_millis(500));
@@ -115,23 +108,23 @@ impl<T: SerialCommunication> Elm327<T> {
         }
         Ok(())
     }
+}
 
-    fn connect(&mut self, check_baud_rate: bool) -> Result<()> {
-        self.flush_buffers()?;
+impl<T: std::io::Read + std::io::Write> Elm327<T> {
+    /// Creates a new Elm327 adapter with the given underlying serial device
+    pub fn new(device: T) -> Result<Self> {
+        let mut device = Self {
+            device: std::io::BufReader::new(low_level::Elm327Reader::new(device)),
+        };
+
+        device.flush_buffers()?;
         thread::sleep(time::Duration::from_millis(500));
-        self.serial_cmd(" ")?;
+        device.serial_cmd(" ")?;
         thread::sleep(time::Duration::from_millis(500));
 
-        self.reset()?;
+        device.flush()?;
 
-        if check_baud_rate {
-            match self.find_baud_rate_divisor()? {
-                Some((rate, div)) => info!("Found baud rate {} (divisor {})", rate, div),
-                None => info!("Could not find better baud rate"),
-            }
-        }
-
-        Ok(())
+        Ok(device)
     }
 
     fn reset_ic(&mut self) -> Result<()> {
@@ -158,6 +151,48 @@ impl<T: SerialCommunication> Elm327<T> {
 
         // get rid of extra data hanging around in the buffer
         self.flush_buffers()?;
+
+        Ok(())
+    }
+
+    fn serial_cmd(&mut self, cmd: &str) -> Result<Option<String>> {
+        self.send_serial_str(cmd)?;
+        self.get_response()
+            .map(|o| o.and_then(|resp| String::from_utf8(resp).ok()))
+    }
+
+    /// Function for sending a raw string, without encoding into ASCII hex
+    fn send_serial_str(&mut self, data: &str) -> Result<()> {
+        trace!("send_serial_str: sending {:?}", data);
+
+        let data = data.as_bytes();
+
+        {
+            let device = self.device.get_mut().get_mut();
+            device.write_all(data)?;
+            device.write_all(b"\r\n")?;
+            device.flush()?;
+        }
+
+        let line = self.get_line()?;
+        if line.as_ref().is_some_and(|v| v == data) {
+            Ok(())
+        } else {
+            Err(Error::Communication(format!(
+                "send_serial_str: got {:?} instead of echoed command ({:?})",
+                line, data
+            )))
+        }
+    }
+}
+
+impl<T: SerialCommunication> Elm327<T> {
+    /// Tries to find a faster compatible baud rate
+    pub fn search_for_baud_rate(&mut self) -> Result<()> {
+        match self.find_baud_rate_divisor()? {
+            Some((rate, div)) => info!("Found baud rate {} (divisor {})", rate, div),
+            None => info!("Could not find better baud rate"),
+        }
 
         Ok(())
     }
@@ -218,30 +253,5 @@ impl<T: SerialCommunication> Elm327<T> {
             thread::sleep(time::Duration::from_millis(200));
         }
         Ok(None)
-    }
-
-    fn serial_cmd(&mut self, cmd: &str) -> Result<Option<String>> {
-        self.send_serial_str(cmd)?;
-        self.get_response()
-            .map(|o| o.and_then(|resp| String::from_utf8(resp).ok()))
-    }
-
-    /// Function for sending a raw string, without encoding into ASCII hex
-    fn send_serial_str(&mut self, data: &str) -> Result<()> {
-        trace!("send_serial_str: sending {:?}", data);
-
-        let data = data.as_bytes();
-
-        self.device.get_mut().get_mut().write_all(data)?;
-        self.device.get_mut().get_mut().write_all(b"\r\n")?;
-        let line = self.get_line()?;
-        if line.as_ref().is_some_and(|v| v == data) {
-            Ok(())
-        } else {
-            Err(Error::Communication(format!(
-                "send_serial_str: got {:?} instead of echoed command ({:?})",
-                line, data
-            )))
-        }
     }
 }

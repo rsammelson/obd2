@@ -26,6 +26,9 @@ impl<T: std::io::Read> std::io::Read for Elm327Reader<T> {
                             if let Ok([src, dst]) = buf.get_disjoint_mut([src, dst]) {
                                 *dst = *src;
                             }
+                            if buf[dst] == b'\r' {
+                                buf[dst] = b'\n';
+                            }
                             dst += 1;
                         }
                     }
@@ -59,6 +62,6 @@ mod test {
         let mut reader = Elm327Reader::new(b"a\0c\ne\r".as_slice());
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer).unwrap();
-        assert_eq!(buffer, b"ace\r");
+        assert_eq!(buffer, b"ace\n");
     }
 }
